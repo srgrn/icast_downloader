@@ -74,10 +74,12 @@ def login(session):
     session.post(LOGIN_URL, data=data, headers=HEADERS, allow_redirects=True)
 
 
-def get_book(url,target):
+def get_book(url, target):
     session = requests.session()
     login(session)
+    print("working on " + url)
     r = session.get(url)
+
     root = html.fromstring(r.text)
     script = root.xpath('//*[@id="colomn_main2"]/div/span/script[1]')
     pre_json = script[0].text
@@ -90,7 +92,9 @@ def get_book(url,target):
         logging.info('creating destination for downloaded books')
     else:
         logging.info('using {} as destination'.format(target))
+    print(f"Total number of files in book {len(json_obj['list'])}")
     for item in json_obj['list']:
+        print(f"Downloading {item['name']}")
         filename = item['name'] + '.mp3'
         filepath = os.path.join(target, filename)
         with open(filepath, 'wb') as book_file:
@@ -99,7 +103,7 @@ def get_book(url,target):
             for chunk in response:
                 book_file.write(chunk)
     logging.info('Finished downloading book')
-    return 
+    return
 
 
 def main():
@@ -108,7 +112,7 @@ def main():
     parser.add_argument('-D', '--debug', help='enable debug mode', action='store_true')
     parser.add_argument('-e', '--email', help='your icast account email')
     parser.add_argument('-p', '--password', help='your icast account password')
-    parser.add_argument('-t', '--target', help='folder to keep downloaded files in', default='./books')
+    parser.add_argument('-t', '--target', help='folder to keep downloaded files in', default=None)
 
     parser.add_argument('--url', help='Audio book url')
     args = parser.parse_args()
@@ -119,8 +123,15 @@ def main():
         CONFIG['password'] = getpass.getpass()
 
     set_arg_in_config(args, 'email')
-
-    get_book(args.url, args.target)
+    if not args.url.startswith(BASE_URL + "ספר"):
+        url = BASE_URL + "ספר/" + args.url
+    else:
+        url = args.url
+    if args.target is None:
+        target = url.replace(BASE_URL + "ספר/", '')
+    else:
+        target = args.target
+    get_book(url, target)
 
 
 if __name__ == '__main__':
