@@ -109,9 +109,9 @@ def main():
     parser.add_argument('-e', '--email', help='your icast account email')
     parser.add_argument('-p', '--password', help='your icast account password')
     parser.add_argument('-t', '--target', help='folder to keep downloaded files in', default='./books')
-
-    parser.add_argument('--url', help='Audio book url')
+    parser.add_argument('-u', '--url', help='Audio book url')
     args = parser.parse_args()
+
     global CONFIG
     CONFIG = setup(args)
     set_arg_in_config(args, 'password')
