@@ -98,6 +98,8 @@ def get_book(session, url, target):
     item_counter = 1
     for item in json_obj['list']:
         filename = item['name'] + '.mp3'
+        if 'הודעת זכויות' in filename:
+            continue
         filename = str(item_counter).zfill(digits_number_in_item_count) + ' - ' + filename.replace(':', '-').replace('?', '')
         filepath = os.path.join(target, filename)
         if not os.path.exists(filepath):
