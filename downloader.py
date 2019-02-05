@@ -52,7 +52,7 @@ def set_arg_in_config(args, name):
         CONFIG[name] = getattr(args, name)
 
 
-def login(session):
+def get_login_session():
     data = {'ctl00$ScriptManager': 'ctl00$MainHolder$pnlLogin|ctl00$MainHolder$LoginBox$LoginButton',
             '__EVENTTARGET': 'ctl00$MainHolder$LoginBox$LoginButton',
             '__EVENTARGUMENT': '',
@@ -63,7 +63,7 @@ def login(session):
             'SearchText': 'סופר / קריין / ספר',
             'ctl00$MainHolder$txtName': '',
             'ctl00$MainHolder$txtMail': '',
-            'ctl00$MainHolder$txtPass': 'giladw',
+            'ctl00$MainHolder$txtPass': '',
             'ctl00$MainHolder$txtPassConfirm': '',
             'ctl00$MainHolder$txtCapcha': '',
             'ctl00$MainHolder$LoginBox$UserName': CONFIG['email'],
@@ -71,12 +71,12 @@ def login(session):
             'ctl00$MainHolder$txtSendMail': '',
             'ctl00$MainHolder$SiteFooter$txtMailSend': '',
             '__ASYNCPOST': 'true'}
-    session.post(LOGIN_URL, data=data, headers=HEADERS, allow_redirects=True)
-
-
-def get_book(url,target):
     session = requests.session()
-    login(session)
+    session.post(LOGIN_URL, data=data, headers=HEADERS, allow_redirects=True)
+    return session
+
+
+def get_book(session, url, target):
     r = session.get(url)
     root = html.fromstring(r.text)
     script = root.xpath('//*[@id="colomn_main2"]/div/span/script[1]')
@@ -85,21 +85,44 @@ def get_book(url,target):
     pre_json = pre_json.replace("var player = new BooksPlayer(", '')[:-3]
     # print(pre_json)
     json_obj = yaml.load(pre_json.replace('\t', '').replace('free:false,', '').strip())
+    if not target:
+        book_title_clean = root.xpath('/html/head/title')[0].text.replace('\r\n', '').replace('\t', '').replace(':', '').replace('?', '')
+        target = os.path.join('./books/', book_title_clean)
     if not os.path.isdir(target):
         os.mkdir(target)
         logging.info('creating destination for downloaded books')
     else:
         logging.info('using {} as destination'.format(target))
+
+    digits_number_in_item_count = len(str(len(json_obj['list'])))
+    item_counter = 1
     for item in json_obj['list']:
         filename = item['name'] + '.mp3'
+        filename = str(item_counter).zfill(digits_number_in_item_count) + ' - ' + filename.replace(':', '-').replace('?', '')
         filepath = os.path.join(target, filename)
-        with open(filepath, 'wb') as book_file:
-            response = session.get(item['mp3'],
-                                   stream=True)
-            for chunk in response:
-                book_file.write(chunk)
+        if not os.path.exists(filepath):
+            with open(filepath, 'wb') as book_file:
+                response = session.get(item['mp3'],
+                                       stream=True)
+                for chunk in response:
+                    book_file.write(chunk)
+        item_counter += 1
     logging.info('Finished downloading book')
-    return 
+    return
+
+
+def scrape_search(session, search_url):
+    response = session.get(search_url, headers=HEADERS, allow_redirects=True)
+    with open('tmp.txt', 'w', encoding='utf-8') as file:
+        file.write(response.text)
+    root = html.fromstring(response.text)
+    books = []
+    for i in range(6, 1000, 2):
+        book_url = root.xpath(f'//*[@id="MainHolder_pnlSearch"]/div[{i}]/div[2]/a[1]')
+        if book_url:
+            books.append({'url': book_url[0].attrib['href']})
+
+    return books
 
 
 def main():
@@ -120,7 +143,29 @@ def main():
 
     set_arg_in_config(args, 'email')
 
-    get_book(args.url, args.target)
+    # books = [
+             # {'name': 'אהבה זה כל הספר',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%90%D7%94%D7%91%D7%94-%D7%96%D7%94-%D7%9B%D7%9C-%D7%94%D7%A1%D7%A4%D7%A8'},
+             # {'name': 'קהלת הפילוסוף המקראי',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%A7%D7%94%D7%9C%D7%AA-%D7%94%D7%A4%D7%99%D7%9C%D7%95%D7%A1%D7%95%D7%A3-%D7%94%D7%9E%D7%A7%D7%A8%D7%90%D7%99'},
+             # {'name': 'שיחות על תורת המספרים',
+             #  'url': '%D7%A1%D7%A4%D7%A8/%D7%A9%D7%99%D7%97%D7%95%D7%AA-%D7%A2%D7%9C-%D7%AA%D7%95%D7%A8%D7%AA-%D7%94%D7%9E%D7%A9%D7%97%D7%A7%D7%99%D7%9D'},
+             # {'name': 'סודותיו של מורה הנבוכים',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%A9%D7%99%D7%97%D7%95%D7%AA-%D7%A2%D7%9C-%D7%AA%D7%95%D7%A8%D7%AA-%D7%94%D7%9E%D7%A9%D7%97%D7%A7%D7%99%D7%9D'},
+             # {'name': 'המוח המשותף',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%94%D7%9E%D7%95%D7%97-%D7%94%D7%9E%D7%A9%D7%95%D7%AA%D7%A3'},
+             # {'name': 'דודי שמחה',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%93%D7%95%D7%93%D7%99-%D7%A9%D7%9E%D7%97%D7%94'},
+             # {'name': 'קיצור תולדות האנושות',
+             #  'url': 'http://books.icast.co.il/%D7%A1%D7%A4%D7%A8/%D7%A7%D7%99%D7%A6%D7%95%D7%A8-%D7%AA%D7%95%D7%9C%D7%93%D7%95%D7%AA-%D7%94%D7%90%D7%A0%D7%95%D7%A9%D7%95%D7%AA'}
+             # ]
+
+    session = get_login_session()
+    books = scrape_search(session, 'http://books.icast.co.il/%D7%A1%D7%95%D7%A4%D7%A8%D7%99%D7%9D/%D7%93%D7%A2%D7%90%D7%9C-%D7%A9%D7%9C%D7%95')
+
+    for book in books:
+        # target = './books/' + book['name']
+        get_book(session, book['url'], '')
 
 
 if __name__ == '__main__':
